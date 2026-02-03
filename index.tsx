@@ -134,6 +134,10 @@ const AddBondsPanel = ({ inputValue, setInputValue, onSave }: AddBondsPanelProps
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave();
+    // Maintain focus on input after submission
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
   };
 
   return (
@@ -413,7 +417,6 @@ const PrizeBondApp = () => {
     
     let duplicates = 0;
     let rangeFormatErrors = 0; // x-y but wrong digits
-    let rangeOrderErrors = 0; // x > y
     let rangeSizeErrors = 0; // > max
     let singleFormatErrors = 0; // not 7 digits
 
@@ -426,12 +429,12 @@ const PrizeBondApp = () => {
       if (rangeMatch) {
         const startStr = rangeMatch[1];
         const endStr = rangeMatch[2];
-        const start = parseInt(startStr, 10);
-        const end = parseInt(endStr, 10);
+        let start = parseInt(startStr, 10);
+        let end = parseInt(endStr, 10);
 
+        // Allow inverted ranges (e.g. 0944699-0944683) by swapping them
         if (start > end) {
-          rangeOrderErrors++;
-          return;
+          [start, end] = [end, start];
         }
 
         if (end - start > MAX_RANGE_SIZE) { 
@@ -472,20 +475,30 @@ const PrizeBondApp = () => {
       setBonds(prev => [...Array.from(validNewBonds).reverse(), ...prev]);
       setInputValue('');
       
-      let message = `Added ${validNewBonds.size} bonds.`;
-      if (duplicates > 0) message += ` ${duplicates} duplicates skipped.`;
+      let message = `Added ${validNewBonds.size} bond${validNewBonds.size > 1 ? 's' : ''}.`;
+      if (duplicates > 0) message += ` ${duplicates} duplicate${duplicates > 1 ? 's' : ''} skipped.`;
       
       showNotification('success', message);
     } else {
       const parts = [];
-      if (duplicates > 0) parts.push(`${duplicates} duplicates`);
-      if (rangeOrderErrors > 0) parts.push(`${rangeOrderErrors} invalid ranges (start > end)`);
+      const hasFormatErrors = rangeSizeErrors > 0 || rangeFormatErrors > 0 || singleFormatErrors > 0;
+      
+      if (duplicates > 0) {
+          // If only duplicates found and no formatting errors, clear the input
+          if (!hasFormatErrors) {
+              setInputValue('');
+              showNotification('warning', `Duplicate bond${duplicates > 1 ? 's' : ''} found.`);
+              return;
+          }
+          parts.push(`${duplicates} duplicate${duplicates > 1 ? 's' : ''}`);
+      }
+      
       if (rangeSizeErrors > 0) parts.push(`${rangeSizeErrors} ranges too large (max ${MAX_RANGE_SIZE})`);
       if (rangeFormatErrors > 0) parts.push(`${rangeFormatErrors} ranges with invalid digits (must be 7)`);
-      if (singleFormatErrors > 0) parts.push(`${singleFormatErrors} invalid numbers (must be 7 digits)`);
+      if (singleFormatErrors > 0) parts.push(`${singleFormatErrors} invalid number${singleFormatErrors > 1 ? 's' : ''} (must be 7 digits)`);
       
       if (parts.length > 0) {
-        showNotification('warning', `No new bonds added. Issues: ${parts.join(', ')}.`);
+        showNotification('warning', `Issue${parts.length > 1 ? 's' : ''}: ${parts.join(', ')}.`);
       } else {
         showNotification('error', 'No valid bonds found.');
       }
