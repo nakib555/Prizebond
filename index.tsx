@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
   Trash2, 
@@ -69,225 +69,130 @@ const StatCard = ({ icon: Icon, label, value, colorClass, bgClass }: { icon: any
   </div>
 );
 
-const PrizeBondApp = () => {
-  // State
-  const [bonds, setBonds] = useState<string[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+// --- Sub-components extracted to prevent re-render focus loss ---
+
+interface AddBondsPanelProps {
+  inputValue: string;
+  setInputValue: (val: string) => void;
+  onSave: () => void;
+}
+
+const AddBondsPanel = ({ inputValue, setInputValue, onSave }: AddBondsPanelProps) => {
+  const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave();
+  };
+
+  return (
+    <div className="flex-none mb-6 animate-in relative z-30">
+      <form 
+          onSubmit={handleSubmit}
+          className={`
+            relative group flex items-start gap-2 p-2 rounded-2xl border transition-all duration-300
+            ${isFocused 
+              ? 'bg-white dark:bg-slate-900 border-indigo-500/30 ring-4 ring-indigo-500/10 shadow-xl shadow-indigo-500/10' 
+              : 'bg-white/60 dark:bg-slate-900/60 border-slate-200 dark:border-white/10 hover:border-indigo-500/20 hover:bg-white dark:hover:bg-slate-900 shadow-sm'}
+          `}
+      >
+          <div className="relative flex-1">
+              <div className={`absolute left-3 top-3.5 transition-colors duration-300 ${isFocused ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                  <Plus size={20} />
+              </div>
+              
+              <div className="flex flex-col">
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    placeholder="Add 7-digit bonds..."
+                    className="w-full bg-transparent border-none p-0 pl-10 pr-8 py-3 text-base font-mono text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:ring-0"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                />
+                
+                {/* Collapsible Help Text */}
+                <div className={`
+                  overflow-hidden transition-all duration-300 ease-in-out pl-10
+                  ${isFocused ? 'max-h-20 opacity-100 pb-2 mt-1' : 'max-h-0 opacity-0'}
+                `}>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-indigo-500"></span>
+                      Exact 7 digits required
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-emerald-500"></span>
+                      Range: 1234567-1234570
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {inputValue && (
+                <button 
+                  type="button"
+                  onClick={() => { 
+                    setInputValue(''); 
+                    inputRef.current?.focus(); 
+                  }}
+                  className="absolute right-2 top-3 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              )}
+          </div>
+
+          <button
+              type="submit"
+              disabled={!inputValue.trim()}
+              className={`
+                flex-none self-start h-[48px] rounded-xl font-medium shadow-lg transition-all duration-300 flex items-center justify-center
+                ${inputValue.trim() 
+                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/25 px-6 cursor-pointer active:scale-95' 
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 shadow-none px-4 cursor-not-allowed'}
+              `}
+          >
+              <Save size={20} />
+              {inputValue.trim() && <span className="ml-2 animate-in fade-in slide-in-from-left-2 hidden sm:inline">Save</span>}
+          </button>
+      </form>
+    </div>
+  );
+};
+
+interface BondListPanelProps {
+  bonds: string[];
+  searchQuery: string;
+  setSearchQuery: (val: string) => void;
+  handleCopyAll: () => void;
+  handleClearAll: () => void;
+  handleCopy: (text: string) => void;
+  handleDelete: (bond: string) => void;
+}
+
+const BondListPanel = ({ 
+  bonds, 
+  searchQuery, 
+  setSearchQuery, 
+  handleCopyAll, 
+  handleClearAll, 
+  handleCopy, 
+  handleDelete 
+}: BondListPanelProps) => {
   
-  // Theme State
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof localStorage !== 'undefined') {
-      const saved = localStorage.getItem('theme');
-      if (saved === 'light' || saved === 'dark') return saved;
-    }
-    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-    return 'dark'; // Default fallback
-  });
-
-  // Apply Theme
-  useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-  };
-
-  // Persistence
-  useEffect(() => {
-    const saved = localStorage.getItem('prize_bonds');
-    if (saved) {
-      try {
-        setBonds(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to load bonds", e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('prize_bonds', JSON.stringify(bonds));
-  }, [bonds]);
-
-  // Notifications Helper
-  const showNotification = (type: NotificationType, message: string) => {
-    const id = Date.now();
-    setNotifications(prev => [...prev, { id, type, message }]);
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 4000);
-  };
-
-  const removeNotification = (id: number) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  // Logic
-  const handleProcessInput = () => {
-    if (!inputValue.trim()) {
-      showNotification('warning', 'Please enter bond numbers to add.');
-      return;
-    }
-
-    // Split by comma, space, or newline to be robust
-    const segments = inputValue.split(/[,\s\n]+/).map(s => s.trim()).filter(Boolean);
-    const validNewBonds = new Set<string>();
-    const existingSet = new Set(bonds);
-    
-    let duplicates = 0;
-    let invalidFormatCount = 0;
-    let rangeErrors = 0;
-
-    segments.forEach(segment => {
-      const rangeMatch = segment.match(/^(\d{7})\s*-\s*(\d{7})$/);
-      
-      if (rangeMatch) {
-        const startStr = rangeMatch[1];
-        const endStr = rangeMatch[2];
-        const start = parseInt(startStr, 10);
-        const end = parseInt(endStr, 10);
-
-        if (start > end) {
-          rangeErrors++;
-          return;
-        }
-
-        if (end - start > 5000) { 
-          rangeErrors++;
-          showNotification('warning', `Range ${segment} too large (max 5000). Skipped.`);
-          return;
-        }
-
-        for (let i = start; i <= end; i++) {
-          const bondStr = i.toString().padStart(7, '0');
-          if (existingSet.has(bondStr) || validNewBonds.has(bondStr)) {
-            duplicates++;
-          } else {
-            validNewBonds.add(bondStr);
-          }
-        }
-      } 
-      else if (/^\d{7}$/.test(segment)) {
-        if (existingSet.has(segment) || validNewBonds.has(segment)) {
-          duplicates++;
-        } else {
-          validNewBonds.add(segment);
-        }
-      } 
-      else {
-        invalidFormatCount++;
-      }
-    });
-
-    if (validNewBonds.size > 0) {
-      setBonds(prev => [...Array.from(validNewBonds).reverse(), ...prev]);
-      setInputValue('');
-      
-      let message = `Added ${validNewBonds.size} bonds.`;
-      if (duplicates > 0) message += ` ${duplicates} skipped.`;
-      
-      showNotification('success', message);
-    } else {
-      let errorMsg = 'No valid bonds added.';
-      if (duplicates > 0) errorMsg += ` ${duplicates} duplicates.`;
-      if (invalidFormatCount > 0) errorMsg += ` ${invalidFormatCount} invalid.`;
-      
-      showNotification(duplicates > 0 ? 'warning' : 'error', errorMsg);
-    }
-  };
-
-  const handleDelete = (bondToDelete: string) => {
-    setBonds(prev => prev.filter(b => b !== bondToDelete));
-    showNotification('success', `Bond ${bondToDelete} deleted.`);
-  };
-  
-  const handleClearAll = () => {
-    if (bonds.length === 0) return;
-    if (confirm(`Are you sure you want to delete ALL ${bonds.length} saved bonds?`)) {
-      setBonds([]);
-      showNotification('success', 'Database cleared.');
-    }
-  };
-
-  const handleCopy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      showNotification('success', `Copied ${text}`);
-    } catch (err) {
-      showNotification('error', 'Failed to copy');
-    }
-  };
-
-  const handleCopyAll = async () => {
-    if (filteredBonds.length === 0) {
-      showNotification('warning', 'No bonds to copy.');
-      return;
-    }
-    
-    try {
-      const text = filteredBonds.join(', ');
-      await navigator.clipboard.writeText(text);
-      showNotification('success', `Copied ${filteredBonds.length} bonds.`);
-    } catch (err) {
-      showNotification('error', 'Failed to copy');
-    }
-  };
-
   const filteredBonds = useMemo(() => {
     if (!searchQuery) return bonds;
     return bonds.filter(b => b.includes(searchQuery));
   }, [bonds, searchQuery]);
 
-  // --- Sub-components ---
-  
-  // 1. Single Line Input Console
-  const AddBondsPanel = () => (
-    <div className="flex-none glass-card p-2 sm:p-3 rounded-2xl flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6 animate-in">
-        <div className="relative flex-1 group">
-            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none group-focus-within:text-indigo-500 dark:group-focus-within:text-indigo-400 transition-colors">
-                <Plus size={18} />
-            </div>
-            <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleProcessInput()}
-                placeholder="Add bonds (e.g. 1234567, 100-200, 8888888)..."
-                className="w-full bg-slate-50 dark:bg-[#0B0F19]/60 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 pl-10 pr-9 py-3 rounded-xl focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/10 transition-all font-mono text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 placeholder:font-sans"
-            />
-             {inputValue && (
-              <button 
-                onClick={() => setInputValue('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                title="Clear Input"
-              >
-                <X size={14} />
-              </button>
-            )}
-        </div>
-        <button
-            onClick={handleProcessInput}
-            disabled={!inputValue.trim()}
-            className="flex-none bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:from-slate-200 disabled:to-slate-300 dark:disabled:from-slate-800 dark:disabled:to-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed text-white font-medium px-5 py-3 rounded-xl shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/20 transition-all active:scale-[0.98] flex items-center gap-2"
-        >
-            <Save size={18} />
-            <span className="hidden sm:inline">Save</span>
-        </button>
-    </div>
-  );
-
-  // 2. Bond List
-  const BondListPanel = () => (
+  return (
     <div className="flex-1 flex flex-col glass-card rounded-2xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-black/20 min-h-0 animate-in" style={{ animationDelay: '0.1s' }}>
       {/* List Header */}
       <div className="flex-none p-4 sm:p-5 border-b border-slate-200 dark:border-white/5 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md z-10 space-y-4">
@@ -405,6 +310,201 @@ const PrizeBondApp = () => {
       </div>
     </div>
   );
+};
+
+const PrizeBondApp = () => {
+  // State
+  const [bonds, setBonds] = useState<string[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  
+  // Theme State
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    }
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'dark'; // Default fallback
+  });
+
+  // Apply Theme
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+
+  // Persistence
+  useEffect(() => {
+    const saved = localStorage.getItem('prize_bonds');
+    if (saved) {
+      try {
+        setBonds(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load bonds", e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('prize_bonds', JSON.stringify(bonds));
+  }, [bonds]);
+
+  // Notifications Helper
+  const showNotification = (type: NotificationType, message: string) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 4000);
+  };
+
+  const removeNotification = (id: number) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  // Logic
+  const handleProcessInput = () => {
+    if (!inputValue.trim()) {
+      showNotification('warning', 'Please enter bond numbers to add.');
+      return;
+    }
+
+    // Split by comma, space, or newline to be robust
+    const segments = inputValue.split(/[,\s\n]+/).map(s => s.trim()).filter(Boolean);
+    const validNewBonds = new Set<string>();
+    const existingSet = new Set(bonds);
+    
+    let duplicates = 0;
+    let invalidFormatCount = 0;
+    let rangeErrors = 0;
+    let lengthErrors = 0; // Track specifically 7-digit errors
+
+    segments.forEach(segment => {
+      // 1. Check for Range with STRICT 7 digits on both sides
+      const rangeMatch = segment.match(/^(\d{7})\s*-\s*(\d{7})$/);
+      
+      if (rangeMatch) {
+        const startStr = rangeMatch[1];
+        const endStr = rangeMatch[2];
+        const start = parseInt(startStr, 10);
+        const end = parseInt(endStr, 10);
+
+        if (start > end) {
+          rangeErrors++;
+          return;
+        }
+
+        if (end - start > 5000) { 
+          rangeErrors++;
+          showNotification('warning', `Range ${segment} too large (max 5000). Skipped.`);
+          return;
+        }
+
+        for (let i = start; i <= end; i++) {
+          const bondStr = i.toString().padStart(7, '0');
+          if (existingSet.has(bondStr) || validNewBonds.has(bondStr)) {
+            duplicates++;
+          } else {
+            validNewBonds.add(bondStr);
+          }
+        }
+      } 
+      else if (segment.includes('-')) {
+        // Range attempted but failed 7-digit check
+        invalidFormatCount++;
+      }
+      else {
+        // 2. Check for Single Bond with STRICT 7 digits
+        if (/^\d{7}$/.test(segment)) {
+          if (existingSet.has(segment) || validNewBonds.has(segment)) {
+            duplicates++;
+          } else {
+            validNewBonds.add(segment);
+          }
+        } 
+        else {
+          // If it is numbers but not 7 digits
+          if (/^\d+$/.test(segment)) {
+            lengthErrors++;
+          } else {
+            invalidFormatCount++;
+          }
+        }
+      }
+    });
+
+    if (validNewBonds.size > 0) {
+      setBonds(prev => [...Array.from(validNewBonds).reverse(), ...prev]);
+      setInputValue('');
+      
+      let message = `Added ${validNewBonds.size} bonds.`;
+      if (duplicates > 0) message += ` ${duplicates} duplicates.`;
+      
+      showNotification('success', message);
+    } else {
+      let errorMsg = 'No valid bonds added.';
+      if (duplicates > 0) errorMsg += ` ${duplicates} duplicates.`;
+      if (lengthErrors > 0) errorMsg += ` ${lengthErrors} skipped (must be exactly 7 digits).`;
+      if (invalidFormatCount > 0) errorMsg += ` ${invalidFormatCount} invalid format.`;
+      
+      showNotification(duplicates > 0 ? 'warning' : 'error', errorMsg);
+    }
+  };
+
+  const handleDelete = (bondToDelete: string) => {
+    setBonds(prev => prev.filter(b => b !== bondToDelete));
+    showNotification('success', `Bond ${bondToDelete} deleted.`);
+  };
+  
+  const handleClearAll = () => {
+    if (bonds.length === 0) return;
+    if (confirm(`Are you sure you want to delete ALL ${bonds.length} saved bonds?`)) {
+      setBonds([]);
+      showNotification('success', 'Database cleared.');
+    }
+  };
+
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showNotification('success', `Copied ${text}`);
+    } catch (err) {
+      showNotification('error', 'Failed to copy');
+    }
+  };
+
+  const filteredBondsForCopy = useMemo(() => {
+    if (!searchQuery) return bonds;
+    return bonds.filter(b => b.includes(searchQuery));
+  }, [bonds, searchQuery]);
+
+  const handleCopyAll = async () => {
+    if (filteredBondsForCopy.length === 0) {
+      showNotification('warning', 'No bonds to copy.');
+      return;
+    }
+    
+    try {
+      const text = filteredBondsForCopy.join(', ');
+      await navigator.clipboard.writeText(text);
+      showNotification('success', `Copied ${filteredBondsForCopy.length} bonds.`);
+    } catch (err) {
+      showNotification('error', 'Failed to copy');
+    }
+  };
 
   return (
     <div className="fixed inset-0 flex flex-col font-sans selection:bg-indigo-500/30 overflow-hidden">
@@ -436,8 +536,20 @@ const PrizeBondApp = () => {
 
       {/* Main Content - Unified Column Layout */}
       <main className="flex-1 flex flex-col overflow-hidden w-full max-w-5xl mx-auto p-4 sm:p-6">
-        <AddBondsPanel />
-        <BondListPanel />
+        <AddBondsPanel 
+          inputValue={inputValue} 
+          setInputValue={setInputValue} 
+          onSave={handleProcessInput} 
+        />
+        <BondListPanel 
+          bonds={bonds}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          handleCopyAll={handleCopyAll}
+          handleClearAll={handleClearAll}
+          handleCopy={handleCopy}
+          handleDelete={handleDelete}
+        />
       </main>
     </div>
   );
