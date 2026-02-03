@@ -7,23 +7,18 @@ import {
   AlertCircle, 
   CheckCircle2, 
   Database,
-  History,
   X,
-  Info,
   Copy,
   ClipboardList,
   Save,
   Wallet,
-  TrendingUp,
-  LayoutGrid,
-  List as ListIcon,
   Sun,
-  Moon
+  Moon,
+  Info
 } from 'lucide-react';
 
 // --- Types ---
 type NotificationType = 'success' | 'error' | 'warning';
-type ViewMode = 'list' | 'add';
 type Theme = 'light' | 'dark';
 
 interface Notification {
@@ -80,7 +75,6 @@ const PrizeBondApp = () => {
   const [inputValue, setInputValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [activeTab, setActiveTab] = useState<ViewMode>('list');
   
   // Theme State
   const [theme, setTheme] = useState<Theme>(() => {
@@ -145,7 +139,8 @@ const PrizeBondApp = () => {
       return;
     }
 
-    const segments = inputValue.split(',').map(s => s.trim()).filter(Boolean);
+    // Split by comma, space, or newline to be robust
+    const segments = inputValue.split(/[,\s\n]+/).map(s => s.trim()).filter(Boolean);
     const validNewBonds = new Set<string>();
     const existingSet = new Set(bonds);
     
@@ -202,7 +197,6 @@ const PrizeBondApp = () => {
       if (duplicates > 0) message += ` ${duplicates} skipped.`;
       
       showNotification('success', message);
-      setActiveTab('list');
     } else {
       let errorMsg = 'No valid bonds added.';
       if (duplicates > 0) errorMsg += ` ${duplicates} duplicates.`;
@@ -254,66 +248,51 @@ const PrizeBondApp = () => {
     return bonds.filter(b => b.includes(searchQuery));
   }, [bonds, searchQuery]);
 
-  // Sub-components
+  // --- Sub-components ---
+  
+  // 1. Single Line Input Console
   const AddBondsPanel = () => (
-    <div className="flex flex-col gap-5 h-full">
-      <div className="glass-card p-5 rounded-2xl flex flex-col gap-4 flex-1 lg:flex-none">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5 text-indigo-600 dark:text-indigo-200">
-            <div className="bg-indigo-100 dark:bg-indigo-500/20 p-1.5 rounded-lg">
-              <Plus size={18} className="text-indigo-600 dark:text-indigo-400" />
-            </div>
-            <span className="font-semibold text-sm tracking-wide">Input Console</span>
-          </div>
-          <button 
-             onClick={() => setInputValue('')}
-             className={`text-xs px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white ${!inputValue ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-          >
-            Clear
-          </button>
-        </div>
-
+    <div className="flex-none glass-card p-2 sm:p-3 rounded-2xl flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6 animate-in">
         <div className="relative flex-1 group">
-          <textarea
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Enter numbers (e.g. 1234567, 8888888-8888890)"
-            className="w-full h-full min-h-[200px] lg:min-h-[280px] bg-slate-50 dark:bg-[#0B0F19] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-300 p-4 rounded-xl focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all font-mono text-sm resize-none custom-scrollbar placeholder:text-slate-400 dark:placeholder:text-slate-700 shadow-inner"
-          />
-          <div className="absolute bottom-4 right-4 text-[10px] text-slate-500 bg-white/80 dark:bg-slate-900/90 px-2 py-1 rounded border border-slate-200 dark:border-slate-800 pointer-events-none">
-            Comma separated
-          </div>
-        </div>
-
-        <button
-          onClick={handleProcessInput}
-          disabled={!inputValue.trim()}
-          className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:from-slate-200 disabled:to-slate-300 dark:disabled:from-slate-800 dark:disabled:to-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-        >
-          <Save size={18} />
-          <span>Save to Database</span>
-        </button>
-      </div>
-
-      <div className="glass-card p-4 rounded-xl border-dashed border-slate-300 dark:border-slate-700/50">
-          <div className="flex items-start gap-3">
-            <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
-            <div className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed space-y-1">
-              <p><strong className="text-slate-700 dark:text-slate-300">Format:</strong> 7-digit numbers.</p>
-              <p><strong className="text-slate-700 dark:text-slate-300">Range:</strong> Use dash (e.g. 100-200).</p>
-              <p><strong className="text-slate-700 dark:text-slate-300">Limit:</strong> Max 5000 per range.</p>
+            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none group-focus-within:text-indigo-500 dark:group-focus-within:text-indigo-400 transition-colors">
+                <Plus size={18} />
             </div>
-          </div>
-      </div>
+            <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleProcessInput()}
+                placeholder="Add bonds (e.g. 1234567, 100-200, 8888888)..."
+                className="w-full bg-slate-50 dark:bg-[#0B0F19]/60 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 pl-10 pr-9 py-3 rounded-xl focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/10 transition-all font-mono text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 placeholder:font-sans"
+            />
+             {inputValue && (
+              <button 
+                onClick={() => setInputValue('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                title="Clear Input"
+              >
+                <X size={14} />
+              </button>
+            )}
+        </div>
+        <button
+            onClick={handleProcessInput}
+            disabled={!inputValue.trim()}
+            className="flex-none bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:from-slate-200 disabled:to-slate-300 dark:disabled:from-slate-800 dark:disabled:to-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed text-white font-medium px-5 py-3 rounded-xl shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/20 transition-all active:scale-[0.98] flex items-center gap-2"
+        >
+            <Save size={18} />
+            <span className="hidden sm:inline">Save</span>
+        </button>
     </div>
   );
 
+  // 2. Bond List
   const BondListPanel = () => (
-    <div className="flex flex-col h-full glass-card rounded-2xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-black/20">
+    <div className="flex-1 flex flex-col glass-card rounded-2xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-black/20 min-h-0 animate-in" style={{ animationDelay: '0.1s' }}>
       {/* List Header */}
       <div className="flex-none p-4 sm:p-5 border-b border-slate-200 dark:border-white/5 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md z-10 space-y-4">
         
-        {/* Stats Row within List */}
+        {/* Stats Row */}
         <div className="grid grid-cols-2 gap-3 mb-2">
            <StatCard 
              icon={Database} 
@@ -331,6 +310,7 @@ const PrizeBondApp = () => {
            />
         </div>
 
+        {/* Search Bar */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1 group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 dark:group-focus-within:text-indigo-400 transition-colors" size={16} />
@@ -338,7 +318,7 @@ const PrizeBondApp = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
+              placeholder="Search stored bonds..."
               className="w-full bg-slate-50 dark:bg-[#0B0F19]/80 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 pl-10 pr-9 py-2.5 rounded-xl focus:outline-none focus:border-indigo-500/50 transition-all text-sm placeholder:text-slate-500 dark:placeholder:text-slate-600"
             />
             {searchQuery && (
@@ -432,7 +412,7 @@ const PrizeBondApp = () => {
       
       {/* Header */}
       <header className="flex-none pt-4 pb-2 px-4 sm:px-6 z-20">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl shadow-lg shadow-indigo-500/20">
               <Database className="text-white" size={20} />
@@ -443,58 +423,21 @@ const PrizeBondApp = () => {
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
-            {/* Theme Toggle */}
-            <button 
-              onClick={toggleTheme}
-              className="p-2 rounded-xl bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm"
-              aria-label="Toggle Theme"
-            >
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-
-            {/* Mobile Tab Toggle */}
-            <div className="lg:hidden bg-white/50 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200 dark:border-white/10 flex shadow-sm">
-              <button
-                onClick={() => setActiveTab('list')}
-                className={`p-2 rounded-lg transition-all ${activeTab === 'list' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
-              >
-                <ListIcon size={18} />
-              </button>
-              <button
-                onClick={() => setActiveTab('add')}
-                className={`p-2 rounded-lg transition-all ${activeTab === 'add' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
-              >
-                <Plus size={18} />
-              </button>
-            </div>
-          </div>
+          {/* Theme Toggle */}
+          <button 
+            onClick={toggleTheme}
+            className="p-2 rounded-xl bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm"
+            aria-label="Toggle Theme"
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden relative w-full max-w-7xl mx-auto p-4 sm:p-6">
-        
-        {/* Desktop Layout (Split View) */}
-        <div className="hidden lg:grid grid-cols-12 gap-8 h-full">
-          <div className="col-span-4 h-full">
-            <AddBondsPanel />
-          </div>
-          <div className="col-span-8 h-full">
-            <BondListPanel />
-          </div>
-        </div>
-
-        {/* Mobile Layout (Tab View) */}
-        <div className="lg:hidden h-full relative">
-          <div className={`absolute inset-0 transition-all duration-300 ease-in-out transform ${activeTab === 'list' ? 'translate-x-0 opacity-100 z-10' : '-translate-x-4 opacity-0 z-0 pointer-events-none'}`}>
-            <BondListPanel />
-          </div>
-          <div className={`absolute inset-0 transition-all duration-300 ease-in-out transform ${activeTab === 'add' ? 'translate-x-0 opacity-100 z-10' : 'translate-x-4 opacity-0 z-0 pointer-events-none'}`}>
-             <AddBondsPanel />
-          </div>
-        </div>
-
+      {/* Main Content - Unified Column Layout */}
+      <main className="flex-1 flex flex-col overflow-hidden w-full max-w-5xl mx-auto p-4 sm:p-6">
+        <AddBondsPanel />
+        <BondListPanel />
       </main>
     </div>
   );
