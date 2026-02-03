@@ -410,20 +410,28 @@ const PrizeBondApp = () => {
       return;
     }
 
-    // Split by comma, space, or newline to be robust
+    // Split by comma, space, or newline
     const segments = inputValue.split(/[,\s\n]+/).map(s => s.trim()).filter(Boolean);
-    const validNewBonds = new Set<string>();
-    const existingSet = new Set(bonds);
     
-    let duplicates = 0;
-    let rangeFormatErrors = 0; // x-y but wrong digits
-    let rangeSizeErrors = 0; // > max
-    let singleFormatErrors = 0; // not 7 digits
+    const newBondsToAdd: string[] = [];
+    const keptSegments: string[] = [];
+    const existingSet = new Set(bonds);
+    // To track duplicates within the current batch
+    const batchSet = new Set<string>();
+    
+    let duplicatesCount = 0;
+    
+    // Error tracking for notification details
+    let rangeSizeErrors = 0;
+    let rangeFormatErrors = 0;
+    let singleFormatErrors = 0;
 
     const MAX_RANGE_SIZE = 50000;
 
     segments.forEach(segment => {
-      // 1. Check for Range with STRICT 7 digits on both sides
+      let isProcessed = false; // "Processed" means handled (saved or identified as duplicate)
+
+      // 1. Check for Range
       const rangeMatch = segment.match(/^(\d{7})\s*-\s*(\d{7})$/);
       
       if (rangeMatch) {
@@ -432,75 +440,92 @@ const PrizeBondApp = () => {
         let start = parseInt(startStr, 10);
         let end = parseInt(endStr, 10);
 
-        // Allow inverted ranges (e.g. 0944699-0944683) by swapping them
         if (start > end) {
           [start, end] = [end, start];
         }
 
         if (end - start > MAX_RANGE_SIZE) { 
           rangeSizeErrors++;
-          return;
-        }
-
-        for (let i = start; i <= end; i++) {
-          const bondStr = i.toString().padStart(7, '0');
-          if (existingSet.has(bondStr) || validNewBonds.has(bondStr)) {
-            duplicates++;
-          } else {
-            validNewBonds.add(bondStr);
+          // Large ranges are not processed, they are kept in input
+        } else {
+          isProcessed = true; // Valid range format, we handle it
+          for (let i = start; i <= end; i++) {
+            const bondStr = i.toString().padStart(7, '0');
+            if (existingSet.has(bondStr) || batchSet.has(bondStr)) {
+              duplicatesCount++;
+            } else {
+              batchSet.add(bondStr);
+              newBondsToAdd.push(bondStr);
+            }
           }
         }
       } 
       else if (segment.includes('-')) {
-        // Range attempted but failed digit check (must be 7)
         rangeFormatErrors++;
+        // Invalid range format, kept in input
       }
       else {
-        // 2. Check for Single Bond with STRICT 7 digits
+        // 2. Check for Single Bond
         if (/^\d{7}$/.test(segment)) {
-          const bondStr = segment; // Already 7 digits
-          if (existingSet.has(bondStr) || validNewBonds.has(bondStr)) {
-            duplicates++;
+          isProcessed = true; // Valid single format
+          const bondStr = segment;
+          if (existingSet.has(bondStr) || batchSet.has(bondStr)) {
+            duplicatesCount++;
           } else {
-            validNewBonds.add(bondStr);
+            batchSet.add(bondStr);
+            newBondsToAdd.push(bondStr);
           }
         } 
         else {
           singleFormatErrors++;
+          // Invalid format, kept in input
         }
+      }
+
+      if (!isProcessed) {
+        keptSegments.push(segment);
       }
     });
 
-    if (validNewBonds.size > 0) {
-      setBonds(prev => [...Array.from(validNewBonds).reverse(), ...prev]);
+    // Update State
+    if (newBondsToAdd.length > 0) {
+      setBonds(prev => [...newBondsToAdd.reverse(), ...prev]);
+    }
+
+    // Update Input - Only keep failed/unprocessed segments
+    if (keptSegments.length === 0) {
       setInputValue('');
-      
-      let message = `Added ${validNewBonds.size} bond${validNewBonds.size > 1 ? 's' : ''}.`;
-      if (duplicates > 0) message += ` ${duplicates} duplicate${duplicates > 1 ? 's' : ''} skipped.`;
+    } else {
+      setInputValue(keptSegments.join(', '));
+    }
+    
+    // Notifications
+    if (newBondsToAdd.length > 0) {
+      let message = `Added ${newBondsToAdd.length} bond${newBondsToAdd.length > 1 ? 's' : ''}.`;
+      if (duplicatesCount > 0) message += ` ${duplicatesCount} duplicate${duplicatesCount > 1 ? 's' : ''} skipped.`;
+      if (keptSegments.length > 0) message += ` Some invalid entries remained.`;
       
       showNotification('success', message);
     } else {
-      const parts = [];
-      const hasFormatErrors = rangeSizeErrors > 0 || rangeFormatErrors > 0 || singleFormatErrors > 0;
-      
-      if (duplicates > 0) {
-          // If only duplicates found and no formatting errors, clear the input
-          if (!hasFormatErrors) {
-              setInputValue('');
-              showNotification('warning', `Duplicate bond${duplicates > 1 ? 's' : ''} found.`);
-              return;
-          }
-          parts.push(`${duplicates} duplicate${duplicates > 1 ? 's' : ''}`);
-      }
-      
-      if (rangeSizeErrors > 0) parts.push(`${rangeSizeErrors} ranges too large (max ${MAX_RANGE_SIZE})`);
-      if (rangeFormatErrors > 0) parts.push(`${rangeFormatErrors} ranges with invalid digits (must be 7)`);
-      if (singleFormatErrors > 0) parts.push(`${singleFormatErrors} invalid number${singleFormatErrors > 1 ? 's' : ''} (must be 7 digits)`);
-      
-      if (parts.length > 0) {
-        showNotification('warning', `Issue${parts.length > 1 ? 's' : ''}: ${parts.join(', ')}.`);
+      // No new bonds added
+      if (duplicatesCount > 0) {
+        // Only duplicates (and possibly errors) found
+        let message = `${duplicatesCount} duplicate${duplicatesCount > 1 ? 's' : ''} found and removed from input.`;
+        if (keptSegments.length > 0) message += ` Please check remaining entries.`;
+        
+        showNotification('warning', message);
       } else {
-        showNotification('error', 'No valid bonds found.');
+        // Only errors
+        const parts = [];
+        if (rangeSizeErrors > 0) parts.push(`${rangeSizeErrors} ranges too large (max ${MAX_RANGE_SIZE})`);
+        if (rangeFormatErrors > 0) parts.push(`${rangeFormatErrors} ranges with invalid digits`);
+        if (singleFormatErrors > 0) parts.push(`${singleFormatErrors} invalid number(s)`);
+        
+        if (parts.length > 0) {
+          showNotification('warning', `Issues: ${parts.join(', ')}.`);
+        } else {
+          showNotification('error', 'No valid bonds found.');
+        }
       }
     }
   };
