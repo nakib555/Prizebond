@@ -11,15 +11,11 @@ import {
   Copy,
   ClipboardList,
   Save,
-  Wallet,
-  Sun,
-  Moon,
-  Info
+  Wallet
 } from 'lucide-react';
 
 // --- Types ---
 type NotificationType = 'success' | 'error' | 'warning';
-type Theme = 'light' | 'dark';
 
 interface Notification {
   id: number;
@@ -30,7 +26,7 @@ interface Notification {
 // --- Components ---
 
 const NotificationToast = ({ notifications, removeNotification }: { notifications: Notification[], removeNotification: (id: number) => void }) => (
-  <div className="fixed top-4 right-4 z-[100] flex flex-col gap-3 pointer-events-none w-full max-w-sm px-4 sm:px-0">
+  <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-3 pointer-events-none w-full max-w-sm px-4 sm:px-0">
     {notifications.map((notif) => (
       <div 
         key={notif.id}
@@ -68,6 +64,60 @@ const StatCard = ({ icon: Icon, label, value, colorClass, bgClass }: { icon: any
     </div>
   </div>
 );
+
+const ConfirmationModal = ({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  count 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onConfirm: () => void; 
+  count: number; 
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-slate-900/20 dark:bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200" 
+        onClick={onClose}
+      />
+      
+      {/* Modal Card */}
+      <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-2xl shadow-black/20 border border-slate-200 dark:border-white/10 p-6 animate-in zoom-in-95 duration-200">
+        <div className="flex flex-col items-center text-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-500/10 text-red-500 flex items-center justify-center mb-1">
+            <Trash2 size={24} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Clear Database?</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+              You are about to delete <span className="font-mono font-bold text-slate-900 dark:text-slate-200">{count}</span> saved bonds. 
+              <br/>This action cannot be undone.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 w-full mt-4">
+            <button
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-xl text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors bg-slate-50 dark:bg-slate-800/50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { onConfirm(); onClose(); }}
+              className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium shadow-lg shadow-red-500/20 transition-all active:scale-95"
+            >
+              Yes, Clear All
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // --- Sub-components extracted to prevent re-render focus loss ---
 
@@ -110,7 +160,7 @@ const AddBondsPanel = ({ inputValue, setInputValue, onSave }: AddBondsPanelProps
                     onChange={(e) => setInputValue(e.target.value)}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
-                    placeholder="Add 7-digit bonds..."
+                    placeholder="Enter bonds (e.g. 1234567 or 0000001-0000100)..."
                     className="w-full bg-transparent border-none p-0 pl-10 pr-8 py-3 text-base font-mono text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:ring-0"
                     autoComplete="off"
                     autoCorrect="off"
@@ -125,11 +175,11 @@ const AddBondsPanel = ({ inputValue, setInputValue, onSave }: AddBondsPanelProps
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
                     <span className="flex items-center gap-1.5">
                       <span className="w-1 h-1 rounded-full bg-indigo-500"></span>
-                      Exact 7 digits required
+                      Single: 1234567 (Exact 7 digits)
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span className="w-1 h-1 rounded-full bg-emerald-500"></span>
-                      Range: 1234567-1234570
+                      Range: 0000001-0000100 (Exact 7 digits)
                     </span>
                   </div>
                 </div>
@@ -318,34 +368,8 @@ const PrizeBondApp = () => {
   const [inputValue, setInputValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   
-  // Theme State
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof localStorage !== 'undefined') {
-      const saved = localStorage.getItem('theme');
-      if (saved === 'light' || saved === 'dark') return saved;
-    }
-    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-    return 'dark'; // Default fallback
-  });
-
-  // Apply Theme
-  useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-  };
-
   // Persistence
   useEffect(() => {
     const saved = localStorage.getItem('prize_bonds');
@@ -388,9 +412,12 @@ const PrizeBondApp = () => {
     const existingSet = new Set(bonds);
     
     let duplicates = 0;
-    let invalidFormatCount = 0;
-    let rangeErrors = 0;
-    let lengthErrors = 0; // Track specifically 7-digit errors
+    let rangeFormatErrors = 0; // x-y but wrong digits
+    let rangeOrderErrors = 0; // x > y
+    let rangeSizeErrors = 0; // > max
+    let singleFormatErrors = 0; // not 7 digits
+
+    const MAX_RANGE_SIZE = 50000;
 
     segments.forEach(segment => {
       // 1. Check for Range with STRICT 7 digits on both sides
@@ -403,13 +430,12 @@ const PrizeBondApp = () => {
         const end = parseInt(endStr, 10);
 
         if (start > end) {
-          rangeErrors++;
+          rangeOrderErrors++;
           return;
         }
 
-        if (end - start > 5000) { 
-          rangeErrors++;
-          showNotification('warning', `Range ${segment} too large (max 5000). Skipped.`);
+        if (end - start > MAX_RANGE_SIZE) { 
+          rangeSizeErrors++;
           return;
         }
 
@@ -423,25 +449,21 @@ const PrizeBondApp = () => {
         }
       } 
       else if (segment.includes('-')) {
-        // Range attempted but failed 7-digit check
-        invalidFormatCount++;
+        // Range attempted but failed digit check (must be 7)
+        rangeFormatErrors++;
       }
       else {
         // 2. Check for Single Bond with STRICT 7 digits
         if (/^\d{7}$/.test(segment)) {
-          if (existingSet.has(segment) || validNewBonds.has(segment)) {
+          const bondStr = segment; // Already 7 digits
+          if (existingSet.has(bondStr) || validNewBonds.has(bondStr)) {
             duplicates++;
           } else {
-            validNewBonds.add(segment);
+            validNewBonds.add(bondStr);
           }
         } 
         else {
-          // If it is numbers but not 7 digits
-          if (/^\d+$/.test(segment)) {
-            lengthErrors++;
-          } else {
-            invalidFormatCount++;
-          }
+          singleFormatErrors++;
         }
       }
     });
@@ -451,16 +473,22 @@ const PrizeBondApp = () => {
       setInputValue('');
       
       let message = `Added ${validNewBonds.size} bonds.`;
-      if (duplicates > 0) message += ` ${duplicates} duplicates.`;
+      if (duplicates > 0) message += ` ${duplicates} duplicates skipped.`;
       
       showNotification('success', message);
     } else {
-      let errorMsg = 'No valid bonds added.';
-      if (duplicates > 0) errorMsg += ` ${duplicates} duplicates.`;
-      if (lengthErrors > 0) errorMsg += ` ${lengthErrors} skipped (must be exactly 7 digits).`;
-      if (invalidFormatCount > 0) errorMsg += ` ${invalidFormatCount} invalid format.`;
+      const parts = [];
+      if (duplicates > 0) parts.push(`${duplicates} duplicates`);
+      if (rangeOrderErrors > 0) parts.push(`${rangeOrderErrors} invalid ranges (start > end)`);
+      if (rangeSizeErrors > 0) parts.push(`${rangeSizeErrors} ranges too large (max ${MAX_RANGE_SIZE})`);
+      if (rangeFormatErrors > 0) parts.push(`${rangeFormatErrors} ranges with invalid digits (must be 7)`);
+      if (singleFormatErrors > 0) parts.push(`${singleFormatErrors} invalid numbers (must be 7 digits)`);
       
-      showNotification(duplicates > 0 ? 'warning' : 'error', errorMsg);
+      if (parts.length > 0) {
+        showNotification('warning', `No new bonds added. Issues: ${parts.join(', ')}.`);
+      } else {
+        showNotification('error', 'No valid bonds found.');
+      }
     }
   };
 
@@ -469,12 +497,14 @@ const PrizeBondApp = () => {
     showNotification('success', `Bond ${bondToDelete} deleted.`);
   };
   
-  const handleClearAll = () => {
+  const handleClearAllClick = () => {
     if (bonds.length === 0) return;
-    if (confirm(`Are you sure you want to delete ALL ${bonds.length} saved bonds?`)) {
-      setBonds([]);
-      showNotification('success', 'Database cleared.');
-    }
+    setIsClearDialogOpen(true);
+  };
+
+  const confirmClearAll = () => {
+    setBonds([]);
+    showNotification('success', 'Database cleared successfully.');
   };
 
   const handleCopy = async (text: string) => {
@@ -509,6 +539,12 @@ const PrizeBondApp = () => {
   return (
     <div className="fixed inset-0 flex flex-col font-sans selection:bg-indigo-500/30 overflow-hidden">
       <NotificationToast notifications={notifications} removeNotification={removeNotification} />
+      <ConfirmationModal 
+        isOpen={isClearDialogOpen} 
+        onClose={() => setIsClearDialogOpen(false)} 
+        onConfirm={confirmClearAll} 
+        count={bonds.length} 
+      />
       
       {/* Header */}
       <header className="flex-none pt-4 pb-2 px-4 sm:px-6 z-20">
@@ -523,14 +559,7 @@ const PrizeBondApp = () => {
             </div>
           </div>
           
-          {/* Theme Toggle */}
-          <button 
-            onClick={toggleTheme}
-            className="p-2 rounded-xl bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm"
-            aria-label="Toggle Theme"
-          >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
+          {/* Theme Toggle - REMOVED */}
         </div>
       </header>
 
@@ -546,7 +575,7 @@ const PrizeBondApp = () => {
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           handleCopyAll={handleCopyAll}
-          handleClearAll={handleClearAll}
+          handleClearAll={handleClearAllClick}
           handleCopy={handleCopy}
           handleDelete={handleDelete}
         />
